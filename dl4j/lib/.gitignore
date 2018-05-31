@@ -1,0 +1,4 @@
+# ignore JARs in lib/
+# will have to copy them over manually (temporary workaround)
+# $ find .m2/repository/ -name '*.jar' -exec cp -prv '{}' 'git/org.eclipse.tracecompass/dl4j/lib/' ';'
+*.jar

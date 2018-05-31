@@ -25,7 +25,10 @@ import java.util.Map;
 import java.util.Objects;
 
 import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.NullProgressMonitor;
+import org.eclipse.core.runtime.Status;
+import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.jdt.annotation.NonNull;
 import org.eclipse.jdt.annotation.Nullable;
 import org.eclipse.jface.action.Action;
@@ -37,13 +40,21 @@ import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.swt.events.MouseAdapter;
 import org.eclipse.swt.events.MouseEvent;
 import org.eclipse.swt.graphics.Image;
+import org.eclipse.swt.graphics.RGBA;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.tracecompass.internal.analysis.profiling.core.callstack.provider.CallStackDataProvider;
 import org.eclipse.tracecompass.internal.analysis.profiling.core.callstack.provider.CallStackEntryModel;
 import org.eclipse.tracecompass.internal.analysis.profiling.ui.Activator;
 import org.eclipse.tracecompass.internal.analysis.profiling.ui.views.flamechart.Messages;
+import org.eclipse.tracecompass.internal.lttng2.ust.core.callstackanomaly.CallStackAnomalyAnalysis;
+import org.eclipse.tracecompass.internal.lttng2.ust.core.callstackanomaly.CallStackAnomalyAnalysisParameters;
+import org.eclipse.tracecompass.internal.lttng2.ust.core.callstackanomaly.CallStackAnomalyAnalysisProvider;
+import org.eclipse.tracecompass.statesystem.core.ITmfStateSystem;
+import org.eclipse.tracecompass.statesystem.core.exceptions.AttributeNotFoundException;
+import org.eclipse.tracecompass.statesystem.core.exceptions.StateSystemDisposedException;
 import org.eclipse.tracecompass.tmf.core.dataprovider.DataProviderManager;
+import org.eclipse.tracecompass.tmf.core.exceptions.TmfAnalysisException;
 import org.eclipse.tracecompass.tmf.core.model.filters.SelectionTimeQueryFilter;
 import org.eclipse.tracecompass.tmf.core.model.timegraph.ITimeGraphDataProvider;
 import org.eclipse.tracecompass.tmf.core.model.timegraph.ITimeGraphEntryModel;
@@ -62,6 +73,7 @@ import org.eclipse.tracecompass.tmf.core.timestamp.TmfTimeRange;
 import org.eclipse.tracecompass.tmf.core.timestamp.TmfTimestamp;
 import org.eclipse.tracecompass.tmf.core.timestamp.TmfTimestampFormat;
 import org.eclipse.tracecompass.tmf.core.trace.ITmfTrace;
+import org.eclipse.tracecompass.tmf.ui.callstackanomaly.CallStackAnomalyAnalysisConfigDialog;
 import org.eclipse.tracecompass.tmf.ui.editors.ITmfTraceEditor;
 import org.eclipse.tracecompass.tmf.ui.symbols.ISymbolProviderPreferencePage;
 import org.eclipse.tracecompass.tmf.ui.symbols.SymbolProviderConfigDialog;
@@ -78,10 +90,10 @@ import org.eclipse.tracecompass.tmf.ui.widgets.timegraph.widgets.Utils;
 import org.eclipse.ui.IEditorPart;
 import org.eclipse.ui.IWorkbenchActionConstants;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-
 
 /**
  * Main implementation for the Call Stack view
@@ -156,6 +168,9 @@ public class FlameChartView extends BaseDataProviderTimeGraphView {
     private static final Image STACKFRAME_IMAGE = Objects.requireNonNull(Activator.getDefault()).getImageFromPath("icons/obj16/stckframe_obj.gif"); //$NON-NLS-1$
 
     private static final String IMPORT_BINARY_ICON_PATH = "icons/obj16/binaries_obj.gif"; //$NON-NLS-1$
+    private static final String CALLSTACK_ANOMALY_ICON_PATH = "icons/obj16/csanomaly_obj.gif"; //$NON-NLS-1$
+    private static final int CALLSTACK_ANOMALY_BOOKMARK_RED = 255;
+    private static final double CALLSTACK_ANOMALY_ALPHA_MAX = 128.0;
 
     // ------------------------------------------------------------------------
     // Fields
@@ -175,6 +190,9 @@ public class FlameChartView extends BaseDataProviderTimeGraphView {
 
     // The action to import a binary file mapping */
     private @Nullable Action fConfigureSymbolsAction;
+
+    // The action to start the callstack anomaly analysis
+    private @Nullable Action fCallStackAnomalyAnalysisAction;
 
     // When set to true, syncToTime() will select the first call stack entry
     // whose current state start time exactly matches the sync time.
@@ -363,6 +381,11 @@ public class FlameChartView extends BaseDataProviderTimeGraphView {
         }
     }
 
+    @Override
+    public void dispose() {
+        super.dispose();
+    }
+
     /**
      * Handler for the selection range signal.
      *
@@ -545,6 +568,8 @@ public class FlameChartView extends BaseDataProviderTimeGraphView {
             return;
         }
         makeActions();
+        manager.appendToGroup(IWorkbenchActionConstants.MB_ADDITIONS, getCallStackAnomalyAnalysisAction());
+        manager.appendToGroup(IWorkbenchActionConstants.MB_ADDITIONS, new Separator());
         manager.appendToGroup(IWorkbenchActionConstants.MB_ADDITIONS, getConfigureSymbolsAction());
         manager.appendToGroup(IWorkbenchActionConstants.MB_ADDITIONS, new Separator());
         manager.appendToGroup(IWorkbenchActionConstants.MB_ADDITIONS, getTimeGraphViewer().getShowFilterDialogAction());
@@ -760,4 +785,112 @@ public class FlameChartView extends BaseDataProviderTimeGraphView {
         super.traceClosed(signal);
     }
 
+    // ------------------------------------------------------------------------
+    // Methods related to callstack anomaly analysis
+    // ------------------------------------------------------------------------
+
+    /**
+     * Add a bookmark
+     *
+     * @param time
+     *            the timestamp
+     * @param duration
+     *            the duration/width
+     * @param label
+     *            the bookmark label
+     * @param rgba
+     *            the color
+     * @since 1.1
+     */
+    public void addBookmark(long time, long duration, String label, RGBA rgba) {
+        Display.getDefault().asyncExec(() -> getTimeGraphViewer().addBookmark(time, duration, label, rgba));
+    }
+
+    /**
+     * Get action for running callstack anomaly analysis
+     *
+     * @since 1.1
+     */
+    private Action getCallStackAnomalyAnalysisAction() {
+        if (fCallStackAnomalyAnalysisAction != null) {
+            return fCallStackAnomalyAnalysisAction;
+        }
+
+        Action callStackAnomalyAnalysisAction = new Action(Messages.CallStackView_CallStackAnomalyAnalysisText) {
+            @Override
+            public void run() {
+                final CallStackAnomalyAnalysisConfigDialog dialog = new CallStackAnomalyAnalysisConfigDialog(getSite().getShell());
+                if (dialog.open() == IDialogConstants.OK_ID) {
+                    // Get parameters from dialog
+                    final CallStackAnomalyAnalysisParameters parameters = dialog.getParameters();
+
+                    ITmfTrace trace = getTrace();
+                    if (trace == null) {
+                        return;
+                    }
+                    Job runAnalysis = new Job("Running analysis") { //$NON-NLS-1$
+                        @Override
+                        protected IStatus run(@Nullable IProgressMonitor monitor) {
+                            IProgressMonitor mon = (monitor == null) ? new NullProgressMonitor() : monitor;
+                            final CallStackAnomalyAnalysis callstackAnomalyAnalysis = new CallStackAnomalyAnalysis(parameters, mon);
+                            try {
+                                // Execute analysis
+                                callstackAnomalyAnalysis.setTrace(trace);
+                                callstackAnomalyAnalysis.schedule();
+                                // Might remove and display results as they come
+                                callstackAnomalyAnalysis.waitForCompletion();
+
+                                // Display
+                                ITmfStateSystem ss = callstackAnomalyAnalysis.getStateSystem();
+                                if (ss != null && ss.getNbAttributes() > 0) {
+                                    mon.subTask("displaying results"); //$NON-NLS-1$
+                                    long start = ss.getStartTime();
+                                    long end = ss.getCurrentEndTime();
+                                    int minQuark = ss.getQuarkAbsolute(CallStackAnomalyAnalysisProvider.ATTRIBUTE_INFO, CallStackAnomalyAnalysisProvider.ATTRIBUTE_MIN);
+                                    int maxQuark = ss.getQuarkAbsolute(CallStackAnomalyAnalysisProvider.ATTRIBUTE_INFO, CallStackAnomalyAnalysisProvider.ATTRIBUTE_MAX);
+                                    int thresholdQuark = ss.getQuarkAbsolute(CallStackAnomalyAnalysisProvider.ATTRIBUTE_INFO, CallStackAnomalyAnalysisProvider.ATTRIBUTE_THRESHOLD);
+                                    int resultQuark = ss.getQuarkAbsolute(CallStackAnomalyAnalysisProvider.ATTRIBUTE_RESULTS);
+                                    Double minScore = (Double) ss.querySingleState(start, minQuark).getValue();
+                                    Double maxScore = (Double) ss.querySingleState(start, maxQuark).getValue();
+                                    Double threshold = (Double) ss.querySingleState(start, thresholdQuark).getValue();
+
+                                    if (minScore != null && maxScore != null && threshold != null) {
+                                        ss.query2D(ImmutableList.of(resultQuark), start, end).forEach(itv -> {
+                                            Double score = (Double) itv.getValue();
+                                            if (score != null) {
+                                                Double normalized = (score - minScore) / (maxScore - minScore);
+                                                if (normalized > threshold) {
+                                                    long tStart = itv.getStartTime();
+                                                    long tDuration = itv.getEndTime() - tStart;
+                                                    addBookmark(
+                                                            tStart,
+                                                            tDuration,
+                                                            String.format("%.2f", normalized), //$NON-NLS-1$
+                                                            new RGBA(CALLSTACK_ANOMALY_BOOKMARK_RED, 0, 0, (int) (CALLSTACK_ANOMALY_ALPHA_MAX * normalized)));
+                                                }
+                                            }
+                                        });
+                                    }
+                                }
+                                mon.worked(1);
+                                mon.done();
+                            } catch (TmfAnalysisException | StateSystemDisposedException | AttributeNotFoundException e) {
+                                return new Status(IStatus.ERROR, Activator.PLUGIN_ID, e.getMessage(), e);
+                            } finally {
+                                callstackAnomalyAnalysis.dispose();
+                            }
+                            return Status.OK_STATUS;
+                        }
+                    };
+                    runAnalysis.schedule();
+                }
+            }
+        };
+
+        callStackAnomalyAnalysisAction.setToolTipText(Messages.CallStackView_CallStackAnomalyAnalysisTooltip);
+        callStackAnomalyAnalysisAction.setImageDescriptor(Objects.requireNonNull(Activator.getDefault()).getImageDescripterFromPath(CALLSTACK_ANOMALY_ICON_PATH));
+
+        fCallStackAnomalyAnalysisAction = callStackAnomalyAnalysisAction;
+        return callStackAnomalyAnalysisAction;
+    }
 }
