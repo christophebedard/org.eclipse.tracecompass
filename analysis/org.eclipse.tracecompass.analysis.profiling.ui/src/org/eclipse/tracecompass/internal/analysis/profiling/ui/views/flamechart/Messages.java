@@ -37,6 +37,9 @@ public class Messages extends NLS {
     public static @Nullable String CallStackView_ConfigureSymbolProvidersText;
     public static @Nullable String CallStackView_ConfigureSymbolProvidersTooltip;
 
+    public static @Nullable String CallStackView_CallStackAnomalyAnalysisText;
+    public static @Nullable String CallStackView_CallStackAnomalyAnalysisTooltip;
+
     public static @Nullable String FlameChartView_NextItemActionNameText;
     public static @Nullable String FlameChartView_NextItemActionToolTipText;
     public static @Nullable String FlameChartView_PreviousItemActionNameText;
