@@ -2381,28 +2381,6 @@ public class TimeGraphViewer extends Viewer implements ITimeDataProvider, IMarke
     }
 
     /**
-     * Add a bookmark
-     *
-     * @param time
-     *            the timestamp
-     * @param duration
-     *            the duration/width
-     * @param label
-     *            the label
-     * @param rgba
-     *            the color
-     * @since 4.1
-     */
-    public void addBookmark(long time, long duration, String label, RGBA rgba) {
-        IMarkerEvent bookmark = new MarkerEvent(null, time, duration, IMarkerEvent.BOOKMARKS, rgba, label, true);
-        fBookmarks.add(bookmark);
-        updateMarkerList();
-        updateMarkerActions();
-        getControl().redraw();
-        fireBookmarkAdded(bookmark);
-    }
-
-    /**
      * Get the toggle bookmark action.
      *
      * @return The Action object
@@ -2421,7 +2399,12 @@ public class TimeGraphViewer extends Viewer implements ITimeDataProvider, IMarke
                         if (dialog.open() == Window.OK) {
                             final String label = dialog.getValue();
                             final RGBA rgba = dialog.getColorValue();
-                            addBookmark(time, duration, label, rgba);
+                            IMarkerEvent bookmark = new MarkerEvent(null, time, duration, IMarkerEvent.BOOKMARKS, rgba, label, true);
+                            fBookmarks.add(bookmark);
+                            updateMarkerList();
+                            updateMarkerActions();
+                            getControl().redraw();
+                            fireBookmarkAdded(bookmark);
                         }
                     } else {
                         fBookmarks.remove(selectedBookmark);
