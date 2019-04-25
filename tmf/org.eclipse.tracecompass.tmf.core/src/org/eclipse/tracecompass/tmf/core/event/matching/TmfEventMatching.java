@@ -70,6 +70,7 @@ public class TmfEventMatching implements ITmfEventMatching {
     private final IMatchProcessingUnit fMatches;
 
     private final Multimap<ITmfTrace, ITmfMatchEventDefinition> fMatchMap = HashMultimap.create();
+    private Class<?> fPriorityDefinition = null;
 
     /**
      * Hashtables for unmatches incoming events
@@ -252,9 +253,15 @@ public class TmfEventMatching implements ITmfEventMatching {
                  * Make sure this definition generates an event key, maybe
                  * another definition does
                  */
-                eventKey = def.getEventKey(event);
-                if (eventKey != null) {
-                    break;
+                if (fPriorityDefinition != null) {
+                    if (fPriorityDefinition.isInstance(def)) {
+                        eventKey = def.getEventKey(event);
+                    }
+                } else {
+                    eventKey = def.getEventKey(event);
+                    if (eventKey != null) {
+                        break;
+                    }
                 }
             }
 
@@ -381,13 +388,23 @@ public class TmfEventMatching implements ITmfEventMatching {
         }
     }
 
+    @Override
+    public boolean matchEvents() {
+        return matchEvents(null);
+    }
+
     /**
      * Method that start the process of matching events
      *
+     * @param priorityDefClass the type of the priority definition
      * @return Whether the match was completed correctly or not
+     * @since 5.0
      */
-    @Override
-    public boolean matchEvents() {
+    public boolean matchEvents(Class<? extends ITmfMatchEventDefinition> priorityDefClass) {
+
+        if (priorityDefClass != null) {
+            fPriorityDefinition = priorityDefClass;
+        }
 
         /* Are there traces to match? If no, return false */
         if (fTraces.isEmpty()) {
