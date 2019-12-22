@@ -25,9 +25,12 @@ import java.io.File;
 import java.lang.reflect.InvocationTargetException;
 import java.text.ParseException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
 
 import org.eclipse.core.resources.IContainer;
 import org.eclipse.core.resources.IFolder;
@@ -44,11 +47,14 @@ import org.eclipse.core.runtime.Path;
 import org.eclipse.core.runtime.Platform;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.SubMonitor;
+import org.eclipse.core.runtime.preferences.InstanceScope;
+import org.eclipse.jdt.annotation.Nullable;
 import org.eclipse.jface.dialogs.IDialogSettings;
 import org.eclipse.jface.layout.GridDataFactory;
 import org.eclipse.jface.layout.GridLayoutFactory;
 import org.eclipse.jface.layout.PixelConverter;
 import org.eclipse.jface.operation.IRunnableWithProgress;
+import org.eclipse.jface.preference.IPreferenceStore;
 import org.eclipse.jface.viewers.ICheckStateListener;
 import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.jface.viewers.ITreeContentProvider;
@@ -83,6 +89,7 @@ import org.eclipse.tracecompass.tmf.core.timestamp.TmfTimestampFormat;
 import org.eclipse.tracecompass.tmf.core.util.Pair;
 import org.eclipse.tracecompass.tmf.ui.dialog.DirectoryDialogFactory;
 import org.eclipse.tracecompass.tmf.ui.dialog.TmfFileDialogFactory;
+import org.eclipse.tracecompass.tmf.ui.preferences.DefaultTraceLocation;
 import org.eclipse.tracecompass.tmf.ui.project.model.TmfExperimentElement;
 import org.eclipse.tracecompass.tmf.ui.project.model.TmfExperimentFolder;
 import org.eclipse.tracecompass.tmf.ui.project.model.TmfProjectElement;
@@ -97,6 +104,7 @@ import org.eclipse.ui.internal.ide.IDEWorkbenchMessages;
 import org.eclipse.ui.model.WorkbenchContentProvider;
 import org.eclipse.ui.model.WorkbenchLabelProvider;
 import org.eclipse.ui.model.WorkbenchViewerComparator;
+import org.eclipse.ui.preferences.ScopedPreferenceStore;
 
 /**
  * A variant of the standard resource import wizard for importing traces to
@@ -1124,6 +1132,7 @@ public class ImportTraceWizardPage extends WizardResourceImportPage {
 
         if (directoryNameField != null) {
             restoreComboValues(directoryNameField, settings, getPageStoreKey(IMPORT_WIZARD_ROOT_DIRECTORY_ID));
+            addDefaultTraceLocations(directoryNameField);
         }
         if (fArchiveNameField != null) {
             restoreComboValues(fArchiveNameField, settings, getPageStoreKey(IMPORT_WIZARD_ARCHIVE_FILE_NAME_ID));
@@ -1170,6 +1179,42 @@ public class ImportTraceWizardPage extends WizardResourceImportPage {
 
     private String getPageStoreKey(String key) {
         return getName() + key;
+    }
+
+    private static @Nullable String validateDefaultTraceLocation(@Nullable String value) {
+        if (value == null || value.isEmpty()) {
+            return null;
+        }
+        String fullPath = value.replaceFirst("^~", System.getProperty("user.home")); //$NON-NLS-1$//$NON-NLS-2$
+        File file = new File(fullPath);
+        if (!file.exists() || !file.isDirectory()) {
+            return null;
+        }
+        return file.getAbsolutePath();
+    }
+
+    private static void addDefaultTraceLocations(Combo combo) {
+        IPreferenceStore store = new ScopedPreferenceStore(InstanceScope.INSTANCE, DefaultTraceLocation.PREFERENCE_SCOPE);
+        String locationsString = store.getString(DefaultTraceLocation.PREFERENCE_KEY);
+        if (locationsString.isEmpty()) {
+            return;
+        }
+
+        Set<String> locations = new HashSet<>();
+        for (String location : locationsString.split(DefaultTraceLocation.SEPARATOR)) {
+            String defaultTraceLocation = validateDefaultTraceLocation(location);
+            if (defaultTraceLocation != null) {
+                locations.add(defaultTraceLocation);
+            }
+        }
+
+        // Add to combo if it doesn't already contain that location
+        List<String> comboValues = Arrays.asList(combo.getItems());
+        for (String location : locations) {
+            if (!comboValues.contains(location)) {
+                combo.add(location);
+            }
+        }
     }
 
     private static void restoreComboValues(Combo combo, IDialogSettings settings, String key) {
