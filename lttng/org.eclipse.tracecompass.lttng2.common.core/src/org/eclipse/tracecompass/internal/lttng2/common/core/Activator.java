@@ -13,6 +13,8 @@ import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Plugin;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.tracecompass.tmf.core.preferences.DefaultTraceLocation;
+import org.eclipse.tracecompass.tmf.core.preferences.IPreferenceStore;
 import org.osgi.framework.BundleContext;
 
 /**
@@ -31,6 +33,8 @@ public class Activator extends Plugin {
      * The plug-in ID
      */
     public static final String PLUGIN_ID = "org.eclipse.tracecompass.lttng2.common.core"; //$NON-NLS-1$
+
+    private static final String DEFAULT_TRACE_LOCATION = "~/lttng-traces"; //$NON-NLS-1$
 
     /**
      * The shared instance
@@ -69,6 +73,7 @@ public class Activator extends Plugin {
     public void start(BundleContext context) throws Exception {
         super.start(context);
         plugin = this;
+        addDefaultTraceLocation();
     }
 
     @Override
@@ -132,6 +137,13 @@ public class Activator extends Plugin {
      */
     public void logError(String message, Throwable exception) {
         getLog().log(new Status(IStatus.ERROR, PLUGIN_ID, message, exception));
+    }
+
+    private static void addDefaultTraceLocation() {
+        IPreferenceStore store = new ScopedPreferenceStore(InstanceScope.INSTANCE, DefaultTraceLocation.PREFERENCE_SCOPE);
+        String currentValue = store.getString(DefaultTraceLocation.PREFERENCE_KEY);
+        String newValue = currentValue + location + SEPARATOR;
+        store.setValue(PREFERENCE_KEY, newValue);
     }
 
 }

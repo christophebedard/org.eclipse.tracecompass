@@ -82,6 +82,7 @@ import org.eclipse.tracecompass.internal.tmf.ui.project.operations.NewExperiment
 import org.eclipse.tracecompass.internal.tmf.ui.project.operations.SelectTracesOperation;
 import org.eclipse.tracecompass.tmf.core.TmfCommonConstants;
 import org.eclipse.tracecompass.tmf.core.TmfProjectNature;
+import org.eclipse.tracecompass.tmf.core.preferences.DefaultTraceLocation;
 import org.eclipse.tracecompass.tmf.core.project.model.TmfTraceType;
 import org.eclipse.tracecompass.tmf.core.timestamp.ITmfTimestamp;
 import org.eclipse.tracecompass.tmf.core.timestamp.TmfTimestamp;
@@ -89,7 +90,6 @@ import org.eclipse.tracecompass.tmf.core.timestamp.TmfTimestampFormat;
 import org.eclipse.tracecompass.tmf.core.util.Pair;
 import org.eclipse.tracecompass.tmf.ui.dialog.DirectoryDialogFactory;
 import org.eclipse.tracecompass.tmf.ui.dialog.TmfFileDialogFactory;
-import org.eclipse.tracecompass.tmf.ui.preferences.DefaultTraceLocation;
 import org.eclipse.tracecompass.tmf.ui.project.model.TmfExperimentElement;
 import org.eclipse.tracecompass.tmf.ui.project.model.TmfExperimentFolder;
 import org.eclipse.tracecompass.tmf.ui.project.model.TmfProjectElement;
@@ -1193,7 +1193,7 @@ public class ImportTraceWizardPage extends WizardResourceImportPage {
         return file.getAbsolutePath();
     }
 
-    private static void addDefaultTraceLocations(Combo combo) {
+    private void addDefaultTraceLocations(Combo combo) {
         IPreferenceStore store = new ScopedPreferenceStore(InstanceScope.INSTANCE, DefaultTraceLocation.PREFERENCE_SCOPE);
         String locationsString = store.getString(DefaultTraceLocation.PREFERENCE_KEY);
         if (locationsString.isEmpty()) {

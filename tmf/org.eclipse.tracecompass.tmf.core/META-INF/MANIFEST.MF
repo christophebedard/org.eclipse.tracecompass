@@ -114,6 +114,7 @@ Export-Package: org.eclipse.tracecompass.internal.provisional.tmf.core.model.ann
  org.eclipse.tracecompass.tmf.core.model.tree,
  org.eclipse.tracecompass.tmf.core.model.xy,
  org.eclipse.tracecompass.tmf.core.parsers.custom,
+ org.eclipse.tracecompass.tmf.core.preferences,
  org.eclipse.tracecompass.tmf.core.presentation,
  org.eclipse.tracecompass.tmf.core.project.model,
  org.eclipse.tracecompass.tmf.core.request,

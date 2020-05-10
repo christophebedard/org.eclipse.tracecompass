@@ -17,7 +17,6 @@ import org.eclipse.core.runtime.Status;
 import org.eclipse.jface.resource.ImageDescriptor;
 import org.eclipse.jface.resource.ImageRegistry;
 import org.eclipse.swt.graphics.Image;
-import org.eclipse.tracecompass.tmf.ui.preferences.DefaultTraceLocation;
 import org.eclipse.ui.plugin.AbstractUIPlugin;
 import org.osgi.framework.BundleContext;
 
@@ -34,8 +33,6 @@ public class Activator extends AbstractUIPlugin {
      *  The plug-in ID
      */
     public static final String PLUGIN_ID = "org.eclipse.tracecompass.lttng2.kernel.ui"; //$NON-NLS-1$
-
-    private static final String DEFAULT_TRACE_LOCATION = "~/lttng-traces"; //$NON-NLS-1$
 
     /**
      *  The shared instance
@@ -74,7 +71,6 @@ public class Activator extends AbstractUIPlugin {
     public void start(BundleContext context) throws Exception {
         super.start(context);
         plugin = this;
-        DefaultTraceLocation.addLocation(DEFAULT_TRACE_LOCATION);
     }
 
     @Override
